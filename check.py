@@ -654,6 +654,7 @@ def create_todoist_task(event, project_id, token):
 
 def main():
     dry_run = "--dry-run" in sys.argv
+    seed_mode = "--seed" in sys.argv
 
     config_path = os.environ.get(
         "UPSTREAM_WATCH_CONFIG",
@@ -669,22 +670,27 @@ def main():
     print(f"Loading state from {state_path}")
     state = load_state(state_path)
 
+    if seed_mode:
+        print("Seed mode: running all checkers to initialize state, "
+              "no tasks will be created")
+
     todoist_token = os.environ.get("TODOIST_API_TOKEN", "")
     project_name = config.get("todoist", {}).get(
         "project_name", "Upstream Watch"
     )
-    llm_available = bool(
+    llm_available = not seed_mode and bool(
         os.environ.get("AZURE_OPENAI_ENDPOINT", "")
         and os.environ.get("AZURE_OPENAI_API_KEY", "")
     )
-    if llm_available:
-        print("LLM analysis enabled (Azure OpenAI)")
-    else:
-        print("LLM analysis disabled (no credentials)")
+    if not seed_mode:
+        if llm_available:
+            print("LLM analysis enabled (Azure OpenAI)")
+        else:
+            print("LLM analysis disabled (no credentials)")
 
     project_id = None
     open_tasks = []
-    if not dry_run:
+    if not dry_run and not seed_mode:
         if not todoist_token:
             print("Error: TODOIST_API_TOKEN not set", file=sys.stderr)
             sys.exit(1)
@@ -819,6 +825,12 @@ def main():
 
     # Report results
     print(f"\nTotal: {len(all_events)} event(s)")
+
+    if seed_mode:
+        save_state(state, state_path)
+        print(f"\nState saved to {state_path}. All current positions recorded.")
+        print("Next run will only report changes after this point.")
+        return
 
     if dry_run:
         for event in all_events:
