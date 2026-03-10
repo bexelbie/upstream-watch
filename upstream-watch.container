@@ -17,8 +17,8 @@ Description=Upstream dependency watcher
 
 [Container]
 Image=ghcr.io/bexelbie/upstream-watch:latest
-Label=io.containers.autoupdate=registry
 ContainerName=upstream-watch
+PodmanArgs=--pull=newer
 
 # Host directory is mounted as /data inside the container.
 # config.json and state.json live here.

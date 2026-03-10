@@ -392,7 +392,7 @@ def check_commits(entry, entry_state):
 
     for commit in commits:
         sha = commit["sha"]
-        if sha == last_seen or sha.startswith(last_seen):
+        if last_seen and (sha == last_seen or sha.startswith(last_seen)):
             break
         new_commits.append({
             "sha": sha[:12],
