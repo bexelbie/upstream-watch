@@ -125,8 +125,8 @@ def dockerhub_list_tags(image, page_size=50):
 
 
 def todoist_api(method, path, body=None, token=None):
-    """Call Todoist REST API v2."""
-    url = f"https://api.todoist.com/rest/v2{path}"
+    """Call Todoist API v1."""
+    url = f"https://api.todoist.com/api/v1{path}"
     data = json.dumps(body).encode() if body else None
     req = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", f"Bearer {token}")
