@@ -1,0 +1,13 @@
+# ABOUTME: Example systemd timer that triggers the upstream dependency watcher daily.
+# ABOUTME: Copy and adapt for your deployment. Adjust OnCalendar as needed.
+
+[Unit]
+Description=Daily upstream dependency check
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+Unit=upstream-watch.service
+
+[Install]
+WantedBy=timers.target

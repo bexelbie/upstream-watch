@@ -1,0 +1,59 @@
+{
+  "todoist": {
+    "project_name": "Upstream Watch"
+  },
+  "github_repos": [
+    {
+      "name": "my-fork",
+      "repo": "upstream-org/project",
+      "watch": "commits",
+      "branch": "main",
+      "analyze": true,
+      "context": "Description of why you care about this repo.",
+      "fork_patches_source": {
+        "repo": "your-user/project",
+        "path": "FORK.md",
+        "ref": "your-branch"
+      }
+    },
+    {
+      "name": "some-dependency",
+      "repo": "org/dependency",
+      "watch": "releases",
+      "analyze": false,
+      "batch_releases": true,
+      "context": "Utility dependency. Roll on maintenance day."
+    }
+  ],
+  "docker_images": [
+    {
+      "name": "base-image",
+      "image": "python",
+      "tag": "3.13-slim",
+      "watch": "digest",
+      "context": "Base image for your container build."
+    },
+    {
+      "name": "app-container",
+      "image": "someuser/someapp",
+      "watch": "tags",
+      "tag_pattern": "^\\d+\\.\\d+$",
+      "github_repo": "someuser/someapp",
+      "analyze": true,
+      "context": "Runs on your server. Review release notes before updating.",
+      "usage_context_source": {
+        "repo": "your-org/deployment-repo",
+        "path": "path/to/container-config"
+      }
+    }
+  ],
+  "pr_watch": {
+    "namespaces": [
+      {"type": "user", "name": "your-username"},
+      {"type": "org", "name": "your-org"}
+    ]
+  },
+  "workflow_keepalive": [
+    "your-username/repo-with-scheduled-workflows"
+  ]
+}

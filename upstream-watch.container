@@ -1,0 +1,33 @@
+# ABOUTME: Example quadlet container unit for upstream dependency watcher.
+# ABOUTME: Copy and adapt for your deployment. See README.md for details.
+#
+# Installation:
+#   1. Copy this file to your quadlet directory
+#   2. Adjust Volume path and EnvironmentFile for your system
+#   3. Place config.json in the host directory mapped to /data
+#   4. Run: systemctl --user daemon-reload
+#   5. Enable the timer: systemctl --user enable --now upstream-watch.timer
+#
+# Monitoring:
+#   systemctl --user status upstream-watch
+#   journalctl --user -u upstream-watch --no-pager -n 50
+
+[Unit]
+Description=Upstream dependency watcher
+
+[Container]
+Image=ghcr.io/bexelbie/upstream-watch:latest
+Label=io.containers.autoupdate=registry
+ContainerName=upstream-watch
+
+# Host directory is mounted as /data inside the container.
+# config.json and state.json live here.
+Volume=/home/youruser/upstream-watch:/data:Z
+
+[Service]
+Type=oneshot
+# Adapt to your secret delivery mechanism
+EnvironmentFile=-/home/youruser/env
+Restart=no
+StandardOutput=journal
+StandardError=journal
