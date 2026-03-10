@@ -171,10 +171,17 @@ def parse_risk_level(text):
     """
     if not text:
         return None
+    # Try structured "Risk level: X" first, then fall back to standalone keyword
     match = re.search(
-        r"[Rr]isk\s+level[^:]*:\s*\*{0,2}(HIGH|MEDIUM|LOW)\*{0,2}",
+        r"[Rr]isk[\s_]*[Ll]evel[^:]*:\s*\*{0,2}(HIGH|MEDIUM|LOW)\*{0,2}",
         text, re.IGNORECASE,
     )
+    if not match:
+        # Fallback: look for **HIGH**, **MEDIUM**, **LOW** near "risk"
+        match = re.search(
+            r"risk.*?\*{1,2}(HIGH|MEDIUM|LOW)\*{1,2}",
+            text, re.IGNORECASE,
+        )
     if not match:
         return None
     return {"HIGH": 4, "MEDIUM": 3, "LOW": 1}[match.group(1).upper()]
@@ -290,8 +297,11 @@ def check_releases(entry, entry_state):
     entry_state["last_seen"] = new_releases[0]["tag_name"]
 
     if batch_mode and len(new_releases) > 0:
-        oldest = new_releases[-1]["tag_name"]
         newest = new_releases[0]["tag_name"]
+        if last_seen:
+            range_str = f"({last_seen} → {newest})"
+        else:
+            range_str = f"(→ {newest})"
         release_list = "\n".join(
             f"- [{r['tag_name']}]({r.get('html_url', '')})"
             f" ({r.get('published_at', '')[:10]})"
@@ -301,7 +311,7 @@ def check_releases(entry, entry_state):
             "title": (
                 f"🔭 {entry['name']}: {len(new_releases)} "
                 f"release{'s' if len(new_releases) != 1 else ''} "
-                f"({oldest} → {newest})"
+                f"{range_str}"
             ),
             "description": (
                 f"**Repo:** [{repo}](https://github.com/{repo})\n"
@@ -654,17 +664,26 @@ def has_existing_task_for(upstream_name, open_tasks):
 
 
 def create_todoist_task(event, project_id, token):
-    """Create a Todoist task from an event."""
+    """Create a Todoist task from an event, with description as first comment."""
     body = {
         "content": event["title"],
-        "description": event["description"],
         "project_id": project_id,
         "labels": ["upstream-watch"],
     }
     priority = event.get("_priority", 1)
     if priority > 1:
         body["priority"] = priority
-    return todoist_api("POST", "/tasks", body=body, token=token)
+    task = todoist_api("POST", "/tasks", body=body, token=token)
+
+    # Add the full description as the first comment
+    description = event.get("description", "")
+    if description and task and task.get("id"):
+        todoist_api("POST", "/comments", body={
+            "task_id": task["id"],
+            "content": description,
+        }, token=token)
+
+    return task
 
 
 # --- Main ---
@@ -673,6 +692,12 @@ def create_todoist_task(event, project_id, token):
 def main():
     dry_run = "--dry-run" in sys.argv
     seed_mode = "--seed" in sys.argv
+    verbose = "--verbose" in sys.argv or "-v" in sys.argv
+
+    def log(msg, **kwargs):
+        """Print only in verbose mode."""
+        if verbose:
+            print(msg, **kwargs)
 
     config_path = os.environ.get(
         "UPSTREAM_WATCH_CONFIG",
@@ -683,13 +708,13 @@ def main():
         os.path.join(os.path.dirname(config_path), "state.json"),
     )
 
-    print(f"Loading config from {config_path}")
+    log(f"Loading config from {config_path}")
     config = load_config(config_path)
-    print(f"Loading state from {state_path}")
+    log(f"Loading state from {state_path}")
     state = load_state(state_path)
 
     if seed_mode:
-        print("Seed mode: running all checkers to initialize state, "
+        log("Seed mode: running all checkers to initialize state, "
               "no tasks will be created")
 
     todoist_token = os.environ.get("TODOIST_API_TOKEN", "")
@@ -702,9 +727,9 @@ def main():
     )
     if not seed_mode:
         if llm_available:
-            print("LLM analysis enabled (Azure OpenAI)")
+            log("LLM analysis enabled (Azure OpenAI)")
         else:
-            print("LLM analysis disabled (no credentials)")
+            log("LLM analysis disabled (no credentials)")
 
     project_id = None
     open_tasks = []
@@ -719,9 +744,9 @@ def main():
                 file=sys.stderr,
             )
             sys.exit(1)
-        print(f"Todoist project '{project_name}' -> {project_id}")
+        log(f"Todoist project '{project_name}' -> {project_id}")
         open_tasks = find_open_todoist_tasks(project_id, todoist_token)
-        print(f"Found {len(open_tasks)} open task(s) in project")
+        log(f"Found {len(open_tasks)} open task(s) in project")
 
     all_events = []
 
@@ -729,7 +754,7 @@ def main():
     for entry in config.get("github_repos", []):
         watch_type = entry.get("watch", "releases")
         entry_state = get_entry_state(state, "github_repos", entry["name"])
-        print(f"Checking {entry['name']} ({watch_type})...", end=" ")
+        log(f"Checking {entry['name']} ({watch_type})...", end=" ")
 
         try:
             if watch_type == "releases":
@@ -739,12 +764,12 @@ def main():
             elif watch_type == "commits":
                 events = check_commits(entry, entry_state)
             else:
-                print(f"unknown watch type '{watch_type}', skipping")
+                log(f"unknown watch type '{watch_type}', skipping")
                 continue
 
             if events and entry.get("analyze") and llm_available:
                 fork_content, usage_content = fetch_analysis_context(entry)
-                print(f"{len(events)} event(s), analyzing...", end=" ")
+                log(f"{len(events)} event(s), analyzing...", end=" ")
                 for i, event in enumerate(events):
                     try:
                         if fork_content:
@@ -757,9 +782,9 @@ def main():
                             )
                     except Exception as e:
                         print(f"LLM error: {e}", file=sys.stderr)
-                print("done")
+                log("done")
             else:
-                print(f"{len(events)} event(s)")
+                log(f"{len(events)} event(s)")
 
             all_events.extend(events)
         except Exception as e:
@@ -769,7 +794,7 @@ def main():
     for entry in config.get("docker_images", []):
         watch_type = entry.get("watch", "digest")
         entry_state = get_entry_state(state, "docker_images", entry["name"])
-        print(f"Checking {entry['name']} ({watch_type})...", end=" ")
+        log(f"Checking {entry['name']} ({watch_type})...", end=" ")
 
         try:
             if watch_type == "digest":
@@ -777,12 +802,12 @@ def main():
             elif watch_type == "tags":
                 events = check_docker_tags(entry, entry_state)
             else:
-                print(f"unknown watch type '{watch_type}', skipping")
+                log(f"unknown watch type '{watch_type}', skipping")
                 continue
 
             if events and entry.get("analyze") and llm_available:
                 fork_content, usage_content = fetch_analysis_context(entry)
-                print(f"{len(events)} event(s), analyzing...", end=" ")
+                log(f"{len(events)} event(s), analyzing...", end=" ")
                 for i, event in enumerate(events):
                     if event.get("_skip_analysis"):
                         continue
@@ -793,9 +818,9 @@ def main():
                             )
                     except Exception as e:
                         print(f"LLM error: {e}", file=sys.stderr)
-                print("done")
+                log("done")
             else:
-                print(f"{len(events)} event(s)")
+                log(f"{len(events)} event(s)")
 
             all_events.extend(events)
         except Exception as e:
@@ -807,10 +832,10 @@ def main():
         if "pr_watch" not in state:
             state["pr_watch"] = {}
         pr_state = state["pr_watch"]
-        print("Checking for new PRs...", end=" ")
+        log("Checking for new PRs...", end=" ")
         try:
             events = check_prs(pr_config, pr_state)
-            print(f"{len(events)} event(s)")
+            log(f"{len(events)} event(s)")
             all_events.extend(events)
         except Exception as e:
             print(f"error: {e}", file=sys.stderr)
@@ -818,10 +843,10 @@ def main():
     # Re-enable workflows disabled by inactivity
     keepalive_repos = config.get("workflow_keepalive", [])
     if keepalive_repos:
-        print("Checking for disabled workflows...", end=" ")
+        log("Checking for disabled workflows...", end=" ")
         try:
             events = reenable_disabled_workflows(keepalive_repos, dry_run)
-            print(f"{len(events)} re-enabled")
+            log(f"{len(events)} re-enabled")
             all_events.extend(events)
         except Exception as e:
             print(f"error: {e}", file=sys.stderr)
@@ -842,12 +867,12 @@ def main():
         })
 
     # Report results
-    print(f"\nTotal: {len(all_events)} event(s)")
+    log(f"\nTotal: {len(all_events)} event(s)")
 
     if seed_mode:
         save_state(state, state_path)
-        print(f"\nState saved to {state_path}. All current positions recorded.")
-        print("Next run will only report changes after this point.")
+        log(f"\nState saved to {state_path}. All current positions recorded.")
+        log("Next run will only report changes after this point.")
         return
 
     if dry_run:
@@ -872,12 +897,12 @@ def main():
     for event in all_events:
         dedup_name = event.pop("_dedup_name", None)
         if dedup_name and has_existing_task_for(dedup_name, open_tasks):
-            print(f"  Skipped (existing task): {event['title']}")
+            log(f"  Skipped (existing task): {event['title']}")
             skipped += 1
             continue
         try:
             create_todoist_task(event, project_id, todoist_token)
-            print(f"  Created: {event['title']}")
+            log(f"  Created: {event['title']}")
             created += 1
         except Exception as e:
             print(
@@ -886,10 +911,12 @@ def main():
             )
 
     save_state(state, state_path)
-    msg = f"\nState saved. {created}/{len(all_events)} tasks created."
-    if skipped:
-        msg += f" ({skipped} skipped as duplicates)"
-    print(msg)
+    if created or skipped or verbose:
+        msg = f"{created} tasks created"
+        if skipped:
+            msg += f", {skipped} skipped"
+        msg += f" ({len(all_events)} events)"
+        print(msg)
 
 
 if __name__ == "__main__":
