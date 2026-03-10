@@ -91,6 +91,9 @@ Omit the `workflow_keepalive` key entirely to disable this feature.
 # Dry run (no Todoist tasks, no state changes):
 python3 check.py --dry-run
 
+# Seed state (record current positions, no tasks, no LLM calls):
+python3 check.py --seed
+
 # Real run (requires Todoist API token and project):
 TODOIST_API_TOKEN=your-token python3 check.py
 
@@ -100,16 +103,15 @@ UPSTREAM_WATCH_STATE=/path/to/state.json python3 check.py --dry-run
 
 ## Deployment (Podman on VPS)
 
-### Build and push the container
+### Container image
 
-```bash
-podman build -t ghcr.io/bexelbie/upstream-watch:latest upstream-watch/
-podman push ghcr.io/bexelbie/upstream-watch:latest
-```
+The container is built automatically by GitHub Actions on push to main and
+published to `ghcr.io/bexelbie/upstream-watch:latest`. No manual build needed.
 
 ### Install quadlet files
 
-Copy the systemd unit files to the quadlet directory:
+Copy the example `.container` and `.timer` files from this repo, adapt paths
+for your system, and install them:
 
 ```bash
 cp upstream-watch.container /etc/containers/systemd/users/$(id -u)/
@@ -120,22 +122,32 @@ systemctl --user daemon-reload
 ### Set up data directory
 
 ```bash
-mkdir -p /home/bexelbie/upstream-watch
-cp config.json /home/bexelbie/upstream-watch/
-cp state.json /home/bexelbie/upstream-watch/
+mkdir -p /home/youruser/upstream-watch
+# Place your config.json here (delivered via secret manager or manual copy)
 ```
 
-On first deploy, copy both config and state. After that, only config needs
-updating — state persists on the data volume.
+### Seed initial state
+
+On first deploy, run with `--seed` to record current positions without
+creating tasks. This prevents a flood of notifications for already-known
+releases:
+
+```bash
+podman run --rm \
+  -v /home/youruser/upstream-watch:/data:Z \
+  -e GITHUB_TOKEN=your-token \
+  ghcr.io/bexelbie/upstream-watch:latest --seed
+```
 
 ### Configure secrets
 
-Add to op-secret-manager configuration:
+Deliver via environment variables (e.g., via op-secret-manager, systemd
+`EnvironmentFile`, or your preferred mechanism):
 
 - `TODOIST_API_TOKEN` — required
 - `AZURE_OPENAI_ENDPOINT` — required for LLM analysis
 - `AZURE_OPENAI_API_KEY` — required for LLM analysis
-- `GITHUB_TOKEN` — optional, for higher API rate limits
+- `GITHUB_TOKEN` — required for private repo access and workflow keepalive
 
 ### Start
 
