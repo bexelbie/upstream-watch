@@ -616,17 +616,35 @@ def reenable_disabled_workflows(repos, dry_run=False):
 
 def resolve_todoist_project(project_name, token):
     """Look up a Todoist project by name, return its ID."""
-    projects = todoist_api("GET", "/projects", token=token)
-    for project in projects:
-        if project["name"] == project_name:
-            return project["id"]
+    cursor = None
+    while True:
+        path = "/projects"
+        if cursor:
+            path += f"?cursor={cursor}"
+        resp = todoist_api("GET", path, token=token)
+        for project in resp.get("results", []):
+            if project["name"] == project_name:
+                return project["id"]
+        cursor = resp.get("next_cursor")
+        if not cursor:
+            break
     return None
 
 
 def find_open_todoist_tasks(project_id, token):
     """Fetch all open tasks in the upstream-watch project."""
-    tasks = todoist_api("GET", f"/tasks?project_id={project_id}", token=token)
-    return tasks or []
+    all_tasks = []
+    cursor = None
+    while True:
+        path = f"/tasks?project_id={project_id}"
+        if cursor:
+            path += f"&cursor={cursor}"
+        resp = todoist_api("GET", path, token=token)
+        all_tasks.extend(resp.get("results", []))
+        cursor = resp.get("next_cursor")
+        if not cursor:
+            break
+    return all_tasks
 
 
 def has_existing_task_for(upstream_name, open_tasks):
