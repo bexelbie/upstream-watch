@@ -171,9 +171,9 @@ def parse_risk_level(text):
     """
     if not text:
         return None
-    # Try structured "Risk level: X" first, then fall back to standalone keyword
+    # Try structured "Risk level: X" first (handles newlines between colon and value)
     match = re.search(
-        r"[Rr]isk[\s_]*[Ll]evel[^:]*:\s*\*{0,2}(HIGH|MEDIUM|LOW)\*{0,2}",
+        r"[Rr]isk[\s_]*[Ll]evel[^:]*:[\s\S]{0,20}?\b(HIGH|MEDIUM|LOW)\b",
         text, re.IGNORECASE,
     )
     if not match:
