@@ -1,3 +1,9 @@
+---
+kind: service
+purpose: Daily runner that checks upstream deps and files Todoist tasks
+visibility: public
+---
+
 # PROJECT CONTEXT
 
 ## What this is
