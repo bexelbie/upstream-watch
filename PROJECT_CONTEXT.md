@@ -57,3 +57,11 @@ The release workflow creates a GitHub Release. The build workflow pushes
 
 No test suite. This is a daily batch script with external dependencies (GitHub API,
 Docker Hub API, Todoist API, Azure OpenAI). Validation is via `--dry-run`.
+
+## Pointers
+
+- deploy → `~/repos/infra/systems/vps-flatcar.md` (host, workload table)
+- Azure OpenAI deployment → `~/repos/infra/systems/cloud-azure.md` (`gpt-4o-mini-upstream-watch`)
+
+Update those infra files when host facts, what's deployed there, or the Azure deployment
+change; keep this repo's own config/behavior detail here instead.
